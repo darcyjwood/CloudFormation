@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create an autoscaling group using t2.micro EC2 instances across 2 public AZs in the default vpc. All EC2 instances should have Apache installed with the ability to check any EC2 created by the autoscaling groups Public IP address and be able to produce a test page. 
+
+Resources:
+  
+  #Creating launch template that will install Apache upon any EC2 Instance startup
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: Wk7LaunchTemplate
+      LaunchTemplateData:
+        ImageId: ami-0022f774911c1d690
+        InstanceType: t2.micro
+        KeyName: MyKeyPair
+        SecurityGroups: 
+        - !Ref MySecurityGroup
+        UserData: 
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y 
+            yum install -y httpd 
+            systemctl start httpd 
+            systemctl enable httpd
+
+  #This will create a security group and allow us to receive web traffic and ssh into the instances
+  MySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow inbound traffic from HTTP and SSH
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 80
+          IpProtocol: tcp
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+  
+  #Creating autoscaling group with desired minimum and maximum size
+  MyASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      MinSize: 2
+      MaxSize: 5
+      DesiredCapacity: 2
+      AvailabilityZones: 
+      - us-east-1a
+      - us-east-1b
+      MetricsCollection:
+      - Granularity: 1Minute
